@@ -95,14 +95,17 @@ bugs that go unnoticed.
 
 ## Platform & Technology Constraints
 
-- **Language**: Swift 5.9+ with strict concurrency checking enabled
-- **Platform**: macOS 14+ (Sonoma), Apple Silicon and Intel
+- **Language**: Swift 6.1+ with strict concurrency checking enabled
+- **Platform**: macOS 26+, Apple Silicon and Intel
 - **UI Framework**: AppKit for menu bar integration; SwiftUI
   permitted for settings/preferences panels only
 - **Audio**: AVFoundation for capture; no third-party audio libs
   unless AVFoundation proves insufficient (document justification)
 - **ML Runtime**: Core ML or llama.cpp-based Whisper port;
   model MUST run on CPU+GPU via Metal, no cloud fallback
+- **Text Cleanup**: Apple Foundation Models (on-device LLM) for
+  filler word removal and formatting; falls back to raw Whisper
+  output if unavailable
 - **App Lifecycle**: LSUIElement (background-only); MUST NOT
   appear in Dock or Cmd+Tab switcher
 - **Global Hotkey**: Default Option+Space, user-configurable;
