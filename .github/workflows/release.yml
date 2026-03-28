@@ -27,7 +27,7 @@ jobs:
           mkdir -p Wisp.app/Contents/MacOS
           mkdir -p Wisp.app/Contents/Resources
           cp .build/release/Wisp Wisp.app/Contents/MacOS/
-          cp Wisp/Resources/Info.plist Wisp.app/Contents/
+          cp Support/Info.plist Wisp.app/Contents/
 
       # ---------------------------------------------------------------------------
       # Optional signing — only runs when the MACOS_CERTIFICATE secret is set.
