@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swift-actions/setup-swift@v3
+      - name: Get swift version
+        run: swift --version # Swift 6.2
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Create app bundle
+        run: |
+          mkdir -p Wisp.app/Contents/MacOS
+          mkdir -p Wisp.app/Contents/Resources
+          cp .build/release/Wisp Wisp.app/Contents/MacOS/
+          cp Wisp/Resources/Info.plist Wisp.app/Contents/
+
+      # ---------------------------------------------------------------------------
+      # Optional signing — only runs when the MACOS_CERTIFICATE secret is set.
+      # To enable:
+      #   1. Export your Developer ID Application certificate as a .p12 file
+      #   2. Base64-encode it: base64 -i cert.p12 | pbcopy
+      #   3. Add GitHub secrets:
+      #        MACOS_CERTIFICATE        — base64-encoded .p12
+      #        MACOS_CERTIFICATE_PWD    — .p12 export password
+      #        MACOS_SIGNING_IDENTITY   — e.g. "Developer ID Application: Your Name (TEAMID)"
+      # ---------------------------------------------------------------------------
+      - name: Import signing certificate
+        if: ${{ secrets.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PWD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$MACOS_CERTIFICATE_PWD" \
+            -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+      - name: Sign app bundle
+        if: ${{ secrets.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          codesign \
+            --deep --force --verify --verbose \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            --entitlements Wisp.entitlements \
+            --options runtime \
+            Wisp.app
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "Wisp" \
+            -srcfolder Wisp.app \
+            -ov -format UDZO \
+            Wisp.dmg
+
+      - name: Create PKG (for Jamf / MDM deployment)
+        run: |
+          pkgbuild \
+            --component Wisp.app \
+            --install-location /Applications \
+            Wisp.pkg
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(date +%Y-%m-%d)-${GITHUB_SHA::7}"
+          gh release create "$VERSION" \
+            --title "Wisp $VERSION" \
+            --notes "Built from [\`${GITHUB_SHA::7}\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)" \
+            --latest \
+            Wisp.dmg \
+            Wisp.pkg
