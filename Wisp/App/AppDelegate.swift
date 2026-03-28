@@ -6,7 +6,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
-    private var state: AppState = .idle
+    private var state: AppState = .loading
     private var currentSession: DictationSession?
 
     private var hotkeyService: HotkeyService?
@@ -16,9 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pasteService: PasteService?
     private var menuBarController: MenuBarController?
     private var notificationService: NotificationService?
+    private var overlayWindow: StatusOverlayWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
+        setupOverlay()
         requestPermissions()
         setupServices()
     }
@@ -30,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withLength: NSStatusItem.squareLength
         )
         menuBarController = MenuBarController(statusItem: statusItem!)
-        menuBarController?.updateState(.idle)
+        menuBarController?.updateState(.loading)
 
         let menu = NSMenu()
         menu.addItem(
@@ -41,6 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
         statusItem?.menu = menu
+    }
+
+    private func setupOverlay() {
+        overlayWindow = StatusOverlayWindow()
+        overlayWindow?.show(state: .modelLoading)
     }
 
     private func requestPermissions() {
@@ -89,10 +96,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let silentBuffer = Data(count: Int(16000 * 4)) // 1s of 16kHz float32 zeros
                 _ = try? await transcriptionService?.transcribe(audioBuffer: silentBuffer)
                 print("[Wisp] Ready — press Option+Space to dictate")
+                transitionToIdle()
             } catch {
                 print("[Wisp] WARNING: Model failed to load: \(error)")
                 print("[Wisp] Transcription will retry on first dictation")
+                overlayWindow?.show(state: .error("Model failed to load"))
+                // After error auto-dismisses, transition to idle so user can still try
+                transitionToIdle()
             }
+        }
+    }
+
+    private func transitionToIdle() {
+        if case .success(let newState) = state.transition(to: .idle) {
+            state = newState
+            menuBarController?.updateState(.idle)
+            overlayWindow?.hide()
         }
     }
 
@@ -101,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleHotkeyToggle() {
         print("[Wisp] handleHotkeyToggle, state: \(state)")
         switch state {
+        case .loading:
+            print("[Wisp] Ignoring hotkey — model still loading")
         case .idle:
             startRecording()
         case .recording:
@@ -131,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("[Wisp] Recording started")
         menuBarController?.updateState(state)
         menuBarController?.playStartSound()
+        overlayWindow?.show(state: .recording)
 
         currentSession = DictationSession()
 
@@ -151,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController?.playStopSound()
         state = newState
         menuBarController?.updateState(state)
+        overlayWindow?.show(state: .transcribing)
 
         currentSession?.stop()
         guard let session = currentSession else {
@@ -190,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarController?.playStopSound()
             state = newState
             menuBarController?.updateState(state)
+            overlayWindow?.show(state: .transcribing)
             currentSession?.stop()
             notificationService?.show(
                 title: "Maximum Duration Reached",
@@ -262,6 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         case .failed(let error):
+            overlayWindow?.show(state: .error(describeError(error)))
             notificationService?.show(
                 title: "Transcription Failed",
                 message: describeError(error)
@@ -270,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         state = .idle
         menuBarController?.updateState(.idle)
+        overlayWindow?.hide()
     }
 
     private func describeError(_ error: TranscriptionError) -> String {

@@ -26,4 +26,4 @@ Thumbs.db
 .env*
 
 # WhisperKit models (large, downloaded at runtime)
-Models/
+/Models/
