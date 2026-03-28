@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 final class AudioCaptureService: @unchecked Sendable {
@@ -10,6 +11,10 @@ final class AudioCaptureService: @unchecked Sendable {
     static let targetSampleRate: Double = 16000
     static let maxDurationSeconds: TimeInterval = 300 // 5 minutes
     static let minimumDurationSeconds: TimeInterval = 0.5
+
+    /// Optional CoreAudio device UID to use as the input device.
+    /// When nil the system default input device is used.
+    var preferredDeviceUID: String?
 
     private let lock = NSLock()
     private var audioEngine: AVAudioEngine?
@@ -38,6 +43,11 @@ final class AudioCaptureService: @unchecked Sendable {
 
         let engine = AVAudioEngine()
         self.audioEngine = engine
+
+        // Switch to the preferred input device if one is configured
+        if let uid = preferredDeviceUID {
+            Self.setInputDevice(uid: uid, on: engine)
+        }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
@@ -128,6 +138,54 @@ final class AudioCaptureService: @unchecked Sendable {
         }
         lock.unlock()
         return stopRecordingInternal()
+    }
+
+    // MARK: - CoreAudio Device Selection
+
+    private static func setInputDevice(uid: String, on engine: AVAudioEngine) {
+        guard let deviceID = resolveDeviceID(forUID: uid) else {
+            print("[Wisp] AudioCaptureService: device UID '\(uid)' not found, using system default")
+            return
+        }
+        guard let audioUnit = engine.inputNode.audioUnit else {
+            print("[Wisp] AudioCaptureService: inputNode has no AudioUnit")
+            return
+        }
+        var id = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &id,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status != noErr {
+            print("[Wisp] AudioCaptureService: failed to set input device (status \(status))")
+        }
+    }
+
+    private static func resolveDeviceID(forUID uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var deviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let cfUID = uid as CFString
+        let status = withUnsafePointer(to: cfUID) { qualifierPtr in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                qualifierPtr,
+                &size,
+                &deviceID
+            )
+        }
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
     }
 
     private func stopRecordingInternal() -> Data {

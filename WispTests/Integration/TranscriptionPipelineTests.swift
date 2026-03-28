@@ -1,10 +1,20 @@
 import XCTest
 @testable import Wisp
 
+@MainActor
 final class TranscriptionPipelineTests: XCTestCase {
 
+    private var preferences: PreferencesStore!
+    private var service: TextCleanupService!
+
+    override func setUp() {
+        super.setUp()
+        let testDefaults = UserDefaults(suiteName: "com.wisp.tests.\(UUID().uuidString)")!
+        preferences = PreferencesStore(defaults: testDefaults)
+        service = TextCleanupService(preferences: preferences)
+    }
+
     func testCleanupRemovesFillers() async throws {
-        let service = TextCleanupService()
         let whisperOutput = "Um hello uh world. I think um we should go."
         let result = try await service.cleanup(whisperOutput)
         XCTAssertFalse(result.lowercased().contains(" um "))
@@ -14,7 +24,6 @@ final class TranscriptionPipelineTests: XCTestCase {
     }
 
     func testCleanupPreservesSentenceStructure() async throws {
-        let service = TextCleanupService()
         let input = "This is a test. Another sentence here."
         let result = try await service.cleanup(input)
         XCTAssertTrue(result.contains("test"))

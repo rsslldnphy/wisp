@@ -25,4 +25,23 @@ final class AudioCaptureServiceTests: XCTestCase {
         let result = service.stopRecording()
         XCTAssertNil(result)
     }
+
+    func testPreferredDeviceUIDDefaultsToNil() {
+        let service = AudioCaptureService()
+        XCTAssertNil(service.preferredDeviceUID)
+    }
+
+    func testPreferredDeviceUIDCanBeSet() {
+        let service = AudioCaptureService()
+        let uid = "AppleUSBAudioEngine:Apple Inc.:Test:001"
+        service.preferredDeviceUID = uid
+        XCTAssertEqual(service.preferredDeviceUID, uid)
+    }
+
+    func testPreferredDeviceUIDCanBeClearedToNil() {
+        let service = AudioCaptureService()
+        service.preferredDeviceUID = "SomeDevice"
+        service.preferredDeviceUID = nil
+        XCTAssertNil(service.preferredDeviceUID)
+    }
 }
