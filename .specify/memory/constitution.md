@@ -1,50 +1,151 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+  Sync Impact Report
+  ==================================================
+  Version change: 0.0.0 → 1.0.0
+  Bump rationale: Initial constitution — MAJOR (first ratification)
+
+  Modified principles: N/A (initial)
+  Added sections:
+    - Core Principles (5): Privacy-First Local Processing,
+      Type Safety & Correctness, Test-First Development,
+      Performance-Conscious Design, Simplicity & YAGNI
+    - Platform & Technology Constraints
+    - Development Workflow
+    - Governance
+
+  Removed sections: None
+
+  Templates requiring updates:
+    - .specify/templates/plan-template.md ✅ no updates needed
+    - .specify/templates/spec-template.md ✅ no updates needed
+    - .specify/templates/tasks-template.md ✅ no updates needed
+    - No command files in .specify/templates/commands/
+
+  Follow-up TODOs: None
+  ==================================================
+-->
+
+# Wisp Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Privacy-First Local Processing
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All audio capture and transcription MUST occur entirely on-device
+using a local Whisper model. No audio data, transcription results,
+or usage telemetry leaves the user's machine. Network access is
+permitted only for model downloads initiated explicitly by the user.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Rationale**: Wisp handles raw microphone input — the most
+sensitive category of user data. Local-only processing is a
+non-negotiable trust guarantee.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Type Safety & Correctness
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+All code MUST use Swift's type system to eliminate runtime errors
+at compile time. Force-unwraps (`!`) are prohibited outside of
+IBOutlet declarations and test assertions. Optional chaining,
+`guard let`, and `Result` types MUST be preferred over implicit
+unwrapping. All public API boundaries MUST have explicit types
+(no inferred return types on public functions).
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+**Rationale**: A background app that crashes silently is worse
+than one that never launches — the user won't notice until they
+need it. Compile-time safety prevents this.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Test-First Development
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Tests MUST be written before implementation (red-green-refactor).
+Every user-facing behavior MUST have at least one XCTest covering
+the happy path and one covering the primary failure mode. Audio
+pipeline components MUST have unit tests using mock audio buffers.
+Integration tests MUST verify the full record-transcribe pipeline
+using fixture audio files.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**Rationale**: A dictation app has a tight feedback loop — bugs
+in transcription or activation are immediately visible to users.
+TDD ensures regressions are caught before they ship.
+
+### IV. Performance-Conscious Design
+
+Audio capture MUST operate on a dedicated high-priority thread
+with zero allocations in the hot path. Transcription latency
+MUST remain under 2x real-time on Apple Silicon (M1 baseline).
+The app MUST consume less than 50 MB of resident memory when
+idle (not recording). UI updates from transcription results
+MUST be dispatched to the main thread without blocking audio
+capture.
+
+**Rationale**: As a background utility, Wisp competes for
+resources with the user's primary applications. Excessive CPU
+or memory usage undermines the "invisible helper" experience.
+
+### V. Simplicity & YAGNI
+
+Features MUST NOT be added speculatively. Each component MUST
+have a single, clear responsibility. Abstractions are permitted
+only when they eliminate duplication across three or more call
+sites. Configuration options MUST be limited to what users
+actually need (hotkey, microphone selection, model choice).
+No plugin systems, no scripting APIs, no cloud sync.
+
+**Rationale**: Wisp is a focused utility, not a platform.
+Complexity in a background app means more surface area for
+bugs that go unnoticed.
+
+## Platform & Technology Constraints
+
+- **Language**: Swift 5.9+ with strict concurrency checking enabled
+- **Platform**: macOS 14+ (Sonoma), Apple Silicon and Intel
+- **UI Framework**: AppKit for menu bar integration; SwiftUI
+  permitted for settings/preferences panels only
+- **Audio**: AVFoundation for capture; no third-party audio libs
+  unless AVFoundation proves insufficient (document justification)
+- **ML Runtime**: Core ML or llama.cpp-based Whisper port;
+  model MUST run on CPU+GPU via Metal, no cloud fallback
+- **App Lifecycle**: LSUIElement (background-only); MUST NOT
+  appear in Dock or Cmd+Tab switcher
+- **Global Hotkey**: Default Option+Space, user-configurable;
+  registered via CGEvent tap or equivalent system API
+- **Distribution**: Notarized .dmg or Homebrew cask; no App Store
+  dependency for initial release
+
+## Development Workflow
+
+- **Branching**: Feature branches off `main`; squash-merge on
+  completion
+- **Testing gate**: All tests MUST pass before merge. No
+  `@available` or `#if DEBUG` test skips in CI
+- **Code review**: All changes require at least one review pass
+  (human or AI-assisted) verifying constitution compliance
+- **Commit discipline**: Each commit MUST compile and pass tests.
+  Work-in-progress commits MUST be squashed before merge
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution is the highest-authority document for Wisp
+development decisions. When a proposal conflicts with these
+principles, the constitution wins unless formally amended.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Amendment procedure**:
+
+1. Propose the change with rationale in a dedicated PR
+2. Update this file with the new or modified principle
+3. Increment the version per semantic versioning rules below
+4. Update `LAST_AMENDED_DATE`
+5. Verify no dependent templates are invalidated
+
+**Versioning policy**:
+
+- MAJOR: Principle removed, redefined, or made incompatible
+  with prior guidance
+- MINOR: New principle added or existing guidance materially
+  expanded
+- PATCH: Wording clarifications, typo fixes, non-semantic
+  refinements
+
+**Compliance review**: Every spec and plan MUST include a
+Constitution Check section verifying alignment with these
+principles before implementation begins.
+
+**Version**: 1.0.0 | **Ratified**: 2026-03-28 | **Last Amended**: 2026-03-28
