@@ -13,6 +13,11 @@ final class MenuBarController {
         guard let button = statusItem.button else { return }
 
         switch state {
+        case .loading:
+            button.image = NSImage(
+                systemSymbolName: "hourglass",
+                accessibilityDescription: "Wisp — Loading"
+            )
         case .idle:
             button.image = NSImage(
                 systemSymbolName: "waveform",
