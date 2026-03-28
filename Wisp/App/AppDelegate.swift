@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
     private var notificationService: NotificationService?
     private var overlayWindow: StatusOverlayWindow?
+    private var logStore = TranscriptionLogStore()
+    private var logWindow: LogWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -48,6 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: ","
             )
         )
+        menu.addItem(
+            NSMenuItem(
+                title: "Show Log",
+                action: #selector(showLog),
+                keyEquivalent: ""
+            )
+        )
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(
@@ -57,6 +66,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
         statusItem?.menu = menu
+    }
+
+    @objc private func showLog() {
+        if logWindow == nil {
+            logWindow = LogWindow()
+        }
+        logWindow?.show(entries: logStore.entries)
     }
 
     @objc private func openPreferences() {
@@ -294,8 +310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentSession = nil
 
         switch result {
-        case .completed:
-            break
+        case .completed(let text):
+            logStore.append(text: text)
         case .discarded(let reason):
             switch reason {
             case .tooShort:

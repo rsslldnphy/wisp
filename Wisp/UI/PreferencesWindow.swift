@@ -28,8 +28,8 @@ final class PreferencesWindow: NSWindowController {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Wisp Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 520, height: 420))
-        window.minSize = NSSize(width: 480, height: 360)
+        window.setContentSize(NSSize(width: 520, height: 560))
+        window.minSize = NSSize(width: 480, height: 520)
         window.center()
         window.isReleasedWhenClosed = false
         // Escape key closes the window without saving (promptDraft is local @State,
