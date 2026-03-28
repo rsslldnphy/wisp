@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: AppState = .loading
     private var currentSession: DictationSession?
 
+    private var preferencesStore: PreferencesStore?
+    private var microphoneList: MicrophoneList?
     private var hotkeyService: HotkeyService?
     private var audioCaptureService: AudioCaptureService?
     private var transcriptionService: TranscriptionService?
@@ -19,10 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindow: StatusOverlayWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        let store = PreferencesStore()
+        preferencesStore = store
+        microphoneList = MicrophoneList()
         setupMenuBar()
         setupOverlay()
         requestPermissions()
-        setupServices()
+        setupServices(preferences: store)
     }
 
     // MARK: - Setup
@@ -37,12 +43,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(
             NSMenuItem(
+                title: "Preferences\u{2026}",
+                action: #selector(openPreferences),
+                keyEquivalent: ","
+            )
+        )
+        menu.addItem(.separator())
+        menu.addItem(
+            NSMenuItem(
                 title: "Quit Wisp",
                 action: #selector(NSApplication.terminate(_:)),
                 keyEquivalent: ""
             )
         )
         statusItem?.menu = menu
+    }
+
+    @objc private func openPreferences() {
+        guard let store = preferencesStore, let mics = microphoneList else { return }
+        PreferencesWindow.show(preferences: store, microphoneList: mics)
     }
 
     private func setupOverlay() {
@@ -63,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        nonisolated(unsafe) let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [promptKey: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         if !trusted {
@@ -75,11 +94,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func setupServices() {
+    private func setupServices(preferences: PreferencesStore) {
         notificationService = NotificationService()
-        textCleanupService = TextCleanupService()
         pasteService = PasteService()
-        audioCaptureService = AudioCaptureService()
+
+        let capture = AudioCaptureService()
+        capture.preferredDeviceUID = preferences.selectedMicrophoneUID
+        audioCaptureService = capture
+
+        textCleanupService = TextCleanupService(preferences: preferences)
         transcriptionService = TranscriptionService()
 
         hotkeyService = HotkeyService { [weak self] in
@@ -95,13 +118,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Transcribe 1 second of silence to trigger Core ML graph compilation
                 let silentBuffer = Data(count: Int(16000 * 4)) // 1s of 16kHz float32 zeros
                 _ = try? await transcriptionService?.transcribe(audioBuffer: silentBuffer)
-                print("[Wisp] Ready — press Option+Space to dictate")
+                print("[Wisp] Ready — press configured shortcut to dictate")
                 transitionToIdle()
             } catch {
                 print("[Wisp] WARNING: Model failed to load: \(error)")
                 print("[Wisp] Transcription will retry on first dictation")
                 overlayWindow?.show(state: .error("Model failed to load"))
-                // After error auto-dismisses, transition to idle so user can still try
                 transitionToIdle()
             }
         }
@@ -148,6 +170,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Sync preferred device UID from preferences before starting
+        audioCaptureService?.preferredDeviceUID = preferencesStore?.selectedMicrophoneUID
+
         state = newState
         print("[Wisp] Recording started")
         menuBarController?.updateState(state)
@@ -183,7 +208,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         print("[Wisp] Session duration: \(session.audioDuration)s")
 
-        // Check minimum duration
         if session.audioDuration < 0.5 {
             print("[Wisp] Recording too short, discarding")
             handleResult(.discarded(reason: .tooShort))

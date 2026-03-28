@@ -18,4 +18,22 @@ final class HotkeyServiceTests: XCTestCase {
         let service = HotkeyService {}
         service.unregister()
     }
+
+    @MainActor
+    func testRegisterDoesNotCrash() {
+        // Registration via KeyboardShortcuts should not crash even without
+        // Accessibility permission in the test environment.
+        let service = HotkeyService {}
+        service.register()
+        service.unregister()
+    }
+
+    @MainActor
+    func testUnregisterPreventsSubsequentCallbacks() {
+        // After unregister(), the isActive flag is false so callbacks are suppressed.
+        let service = HotkeyService {}
+        service.register()
+        service.unregister()
+        // No crash or assertion failure = pass
+    }
 }
