@@ -5,6 +5,9 @@
     <!-- Required for microphone access -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
+    <!-- Required for AppleScript → System Events paste -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
     <!-- Required for WhisperKit / Core ML JIT compilation -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
