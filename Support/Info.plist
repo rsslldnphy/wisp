@@ -20,8 +20,8 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Wisp needs microphone access to transcribe your speech.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Wisp needs to control System Events to paste transcribed text into the active text field.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Wisp needs Accessibility access to paste transcribed text into the active text field.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 
 @MainActor
 final class PasteService {
@@ -7,32 +8,30 @@ final class PasteService {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-
-        // Mark as transient to avoid polluting clipboard managers
         pasteboard.setData(
             Data(),
             forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
         )
 
-        // Use AppleScript via System Events to paste — works reliably
-        // even from bare binaries without a bundle
-        let script = NSAppleScript(source: """
-            tell application "System Events"
-                keystroke "v" using command down
-            end tell
-            """)
-
-        // Small delay to ensure clipboard is settled
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            var error: NSDictionary?
-            script?.executeAndReturnError(&error)
-            if let error {
-                print("[Wisp] Paste failed: \(error)")
+            let source = CGEventSource(stateID: .hidSystemState)
+            let vKey: CGKeyCode = 0x09 // kVK_ANSI_V
+
+            guard
+                let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
+                let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
+            else {
                 completion(true)
-            } else {
-                print("[Wisp] Pasted via System Events")
-                completion(false)
+                return
             }
+
+            keyDown.flags = .maskCommand
+            keyUp.flags   = .maskCommand
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+
+            print("[Wisp] Pasted via CGEvent")
+            completion(false)
         }
     }
 }
