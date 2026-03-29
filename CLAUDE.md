@@ -10,6 +10,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-29
 - JSON file — `~/Library/Application Support/Wisp/transcription-log.json` (004-transcription-log)
 - Swift 6.1+ with strict concurrency checking enabled + AppKit (NSPanel, Core Animation), WhisperKit (existing), AVFoundation (existing) (005-escape-cancel-countdown)
 - JSON file at `~/Library/Application Support/Wisp/transcription-log.json` (existing) (005-escape-cancel-countdown)
+- Swift 6.1+ with strict concurrency checking enabled + AppKit (NSSound, NSStatusItem, NSMenu), ServiceManagement (SMAppService), AVFoundation (existing) (006-polish-and-cleanup)
+- UserDefaults (startup preference, keyed on existing PreferencesStore) (006-polish-and-cleanup)
 
 - Swift 5.9+ with strict concurrency checking + WhisperKit (Argmax), KeyboardShortcuts (Sindre Sorhus), AppKi (001-core-dictation-flow)
 
@@ -29,9 +31,9 @@ tests/
 Swift 5.9+ with strict concurrency checking: Follow standard conventions
 
 ## Recent Changes
+- 006-polish-and-cleanup: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSSound, NSStatusItem, NSMenu), ServiceManagement (SMAppService), AVFoundation (existing)
 - 005-escape-cancel-countdown: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSPanel, Core Animation), WhisperKit (existing), AVFoundation (existing)
 - 004-transcription-log: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSWindow, NSMenu), SwiftUI (List, Button), Foundation (Codable, JSONEncoder/Decoder, FileManager)
-- 003-config-screen: Added Swift 6.2 with strict concurrency checking enabled + WhisperKit (existing), KeyboardShortcuts 2.x (Sindre Sorhus — re-add to Package.swift), AVFoundation (existing), CoreAudio (system framework), Apple FoundationModels (existing), AppKit + SwiftUI
 
 
 <!-- MANUAL ADDITIONS START -->

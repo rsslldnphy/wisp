@@ -13,6 +13,7 @@ struct PreferencesView: View {
         Form {
             shortcutSection
             microphoneSection
+            startupSection
             promptSection
         }
         .formStyle(.grouped)
@@ -51,6 +52,18 @@ struct PreferencesView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var startupSection: some View {
+        Section("System") {
+            Toggle(
+                "Launch Wisp on Startup",
+                isOn: Binding(
+                    get: { preferences.launchOnStartup },
+                    set: { try? preferences.setLaunchOnStartup($0) }
+                )
+            )
         }
     }
 

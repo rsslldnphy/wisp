@@ -1,9 +1,10 @@
 import AppKit
 @preconcurrency import AVFoundation
 @preconcurrency import ApplicationServices
+import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var state: AppState = .loading
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var logStore = TranscriptionLogStore()
     private var logWindow: LogWindow?
     private var escapeMonitor: Any?
+    private var launchOnStartupItem: NSMenuItem?
 
     // Cancel-countdown state (set when the first Escape is pressed during recording)
     private var pendingAudioBuffer: Data?
@@ -31,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let store = PreferencesStore()
+        // Reconcile stored preference with actual system state (handles manual System Settings changes)
+        store.syncLaunchOnStartup(SMAppService.mainApp.status == .enabled)
         preferencesStore = store
         microphoneList = MicrophoneList()
         setupMenuBar()
@@ -49,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController?.updateState(.loading)
 
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(
             NSMenuItem(
                 title: "Preferences\u{2026}",
@@ -63,6 +68,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: ""
             )
         )
+
+        let startupItem = NSMenuItem(
+            title: "Launch on Startup",
+            action: #selector(toggleLaunchOnStartup),
+            keyEquivalent: ""
+        )
+        startupItem.state = (preferencesStore?.launchOnStartup ?? false) ? .on : .off
+        launchOnStartupItem = startupItem
+        menu.addItem(startupItem)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(
@@ -84,6 +99,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openPreferences() {
         guard let store = preferencesStore, let mics = microphoneList else { return }
         PreferencesWindow.show(preferences: store, microphoneList: mics)
+    }
+
+    @objc private func toggleLaunchOnStartup() {
+        guard let store = preferencesStore else { return }
+        do {
+            try store.setLaunchOnStartup(!store.launchOnStartup)
+            launchOnStartupItem?.state = store.launchOnStartup ? .on : .off
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Could Not Update Login Item"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        let isEnabled = SMAppService.mainApp.status == .enabled
+        preferencesStore?.syncLaunchOnStartup(isEnabled)
+        launchOnStartupItem?.state = isEnabled ? .on : .off
     }
 
     private func setupOverlay() {
@@ -303,14 +340,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state = newState
         print("[Wisp] Recording started")
         menuBarController?.updateState(state)
-        menuBarController?.playStartSound()
         overlayWindow?.show(state: .recording)
-
         currentSession = DictationSession()
 
-        audioCaptureService?.startRecording { [weak self] result in
-            DispatchQueue.main.async {
-                self?.handleAutoStop(result: result)
+        menuBarController?.playStartSound { [weak self] in
+            self?.audioCaptureService?.startRecording { [weak self] result in
+                DispatchQueue.main.async {
+                    self?.handleAutoStop(result: result)
+                }
             }
         }
     }
