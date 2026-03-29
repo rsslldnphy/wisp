@@ -24,8 +24,8 @@ final class TranscriptionLogStore {
         self.entries = Self.load(from: url)
     }
 
-    func append(text: String) {
-        let entry = TranscriptionLogEntry(text: text)
+    func append(text: String, wasPasted: Bool = true) {
+        let entry = TranscriptionLogEntry(text: text, wasPasted: wasPasted)
         entries.insert(entry, at: 0)
         if entries.count > 500 {
             entries.removeLast()

@@ -3,6 +3,7 @@ import Foundation
 enum IndicatorState: Equatable, Sendable {
     case modelLoading
     case recording
+    case cancelling
     case transcribing
     case error(String)
     case hidden
@@ -15,6 +16,8 @@ enum IndicatorState: Equatable, Sendable {
             return .hidden
         case .recording:
             return .recording
+        case .cancelling:
+            return .cancelling
         case .processing:
             return .transcribing
         }

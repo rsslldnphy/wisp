@@ -23,6 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var logWindow: LogWindow?
     private var escapeMonitor: Any?
 
+    // Cancel-countdown state (set when the first Escape is pressed during recording)
+    private var pendingAudioBuffer: Data?
+    private var shouldPasteAfterProcessing = false
+    private var cancelCountdownTask: Task<Void, Never>?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let store = PreferencesStore()
@@ -164,42 +169,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Dictation Flow
 
     private func handleEscapeKey() {
-        guard state == .recording else { return }
-        cancelRecording()
+        if state == .recording {
+            beginCancelCountdown()
+        } else if state == .cancelling {
+            restoreFromCancelling()
+        }
     }
 
-    private func cancelRecording() {
-        guard case .success(let newState) = state.transition(to: .processing) else {
-            print("[Wisp] State transition to processing failed (cancel)")
-            return
-        }
-
-        print("[Wisp] Recording cancelled via Escape — will transcribe and save without pasting")
-        menuBarController?.playStopSound()
-        state = newState
-        menuBarController?.updateState(state)
-        overlayWindow?.show(state: .transcribing)
-
+    private func beginCancelCountdown() {
         currentSession?.stop()
         guard let session = currentSession else {
-            print("[Wisp] No active session")
+            print("[Wisp] No active session to cancel")
             return
         }
 
+        menuBarController?.playStopSound()
+
         if session.audioDuration < 0.5 {
-            print("[Wisp] Recording too short, discarding")
+            print("[Wisp] Recording too short, discarding without countdown")
             handleResult(.discarded(reason: .tooShort))
             return
         }
 
         guard let audioBuffer = audioCaptureService?.stopRecording() else {
-            print("[Wisp] No audio buffer returned")
+            print("[Wisp] No audio buffer returned on cancel")
             handleResult(.failed(error: .microphoneUnavailable))
             return
         }
 
+        guard case .success(let newState) = state.transition(to: .cancelling) else {
+            print("[Wisp] State transition to cancelling failed")
+            return
+        }
+
+        print("[Wisp] Starting cancel countdown")
+        state = newState
+        menuBarController?.updateState(state)
+        overlayWindow?.show(state: .cancelling)
+
+        pendingAudioBuffer = audioBuffer
+        shouldPasteAfterProcessing = false
+
+        cancelCountdownTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(3))
+            } catch {
+                return // Cancelled by second Escape press
+            }
+            await MainActor.run { [weak self] in
+                self?.commitCancelledTranscription()
+            }
+        }
+    }
+
+    private func commitCancelledTranscription() {
+        guard state == .cancelling else { return }
+        guard case .success(let newState) = state.transition(to: .processing) else { return }
+
+        print("[Wisp] Cancel countdown expired — transcribing silently without paste")
+        overlayWindow?.hide()
+        state = newState
+        // Menu bar is intentionally not updated here: silent background processing
+        // should not surface a visual indicator. handleResult restores .idle on completion.
+
+        cancelCountdownTask = nil
+        guard let buffer = pendingAudioBuffer else { return }
+        pendingAudioBuffer = nil
+
         Task {
-            await transcribeAndSave(audioBuffer: audioBuffer)
+            await transcribeAndSave(audioBuffer: buffer)
+        }
+    }
+
+    private func restoreFromCancelling() {
+        cancelCountdownTask?.cancel()
+        cancelCountdownTask = nil
+
+        guard case .success(let newState) = state.transition(to: .processing) else {
+            print("[Wisp] State transition from cancelling to processing failed")
+            return
+        }
+
+        print("[Wisp] Cancel reversed via second Escape — will transcribe and paste")
+        shouldPasteAfterProcessing = true
+        state = newState
+        menuBarController?.updateState(state)
+        overlayWindow?.show(state: .transcribing)
+
+        guard let buffer = pendingAudioBuffer else { return }
+        pendingAudioBuffer = nil
+
+        Task {
+            await transcribeAndPaste(audioBuffer: buffer)
         }
     }
 
@@ -212,6 +273,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startRecording()
         case .recording:
             stopRecordingAndTranscribe()
+        case .cancelling:
+            print("[Wisp] Ignoring hotkey during cancel countdown")
         case .processing:
             print("[Wisp] Ignoring hotkey during processing")
         }
@@ -334,6 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("[Wisp] Cleaned text: \(cleanedText)")
 
             await MainActor.run {
+                shouldPasteAfterProcessing = true
                 pasteService?.paste(text: cleanedText) { [weak self] fallbackToClipboard in
                     if fallbackToClipboard {
                         self?.notificationService?.show(
@@ -356,9 +420,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func transcribeAndSave(audioBuffer: Data) async {
         do {
             let rawText = try await transcriptionService?.transcribe(audioBuffer: audioBuffer)
-            guard let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else {
-                await MainActor.run { handleResult(.discarded(reason: .noSpeechDetected)) }
+            guard let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                // No speech detected — silently reset to idle with no notification
+                await MainActor.run { silentlyResetToIdle() }
                 return
             }
             let cleanedText: String
@@ -370,13 +434,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await MainActor.run {
                 handleResult(.completed(text: cleanedText))
             }
-        } catch let error as TranscriptionError {
-            await MainActor.run { handleResult(.failed(error: error)) }
         } catch {
-            await MainActor.run {
-                handleResult(.failed(error: .processingFailed(message: error.localizedDescription)))
-            }
+            // Transcription failed during cancelled recording — silently discard per spec
+            await MainActor.run { silentlyResetToIdle() }
         }
+    }
+
+    private func silentlyResetToIdle() {
+        currentSession = nil
+        if case .success(let newState) = state.transition(to: .idle) {
+            state = newState
+        } else {
+            state = .idle
+        }
+        menuBarController?.updateState(.idle)
     }
 
     private func handleResult(_ result: TranscriptionResult) {
@@ -385,7 +456,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch result {
         case .completed(let text):
-            logStore.append(text: text)
+            logStore.append(text: text, wasPasted: shouldPasteAfterProcessing)
+            shouldPasteAfterProcessing = false
         case .discarded(let reason):
             switch reason {
             case .tooShort:

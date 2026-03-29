@@ -60,4 +60,29 @@ final class TranscriptionLogStoreTests: XCTestCase {
         let store = TranscriptionLogStore(url: testURL)
         XCTAssertEqual(store.entries.count, 0)
     }
+
+    // MARK: - T016: wasPasted flag
+
+    func testAppend_withWasPastedFalse_storesCorrectFlag() {
+        let store = TranscriptionLogStore(url: testURL)
+        store.append(text: "cancelled", wasPasted: false)
+        XCTAssertFalse(store.entries[0].wasPasted,
+                       "append(wasPasted: false) must produce an entry with wasPasted = false")
+    }
+
+    func testAppend_defaultWasPasted_isTrue() {
+        let store = TranscriptionLogStore(url: testURL)
+        store.append(text: "normal")
+        XCTAssertTrue(store.entries[0].wasPasted,
+                      "append() without explicit wasPasted must default to wasPasted = true")
+    }
+
+    func testAppend_wasPastedFalse_persistsAcrossReinit() {
+        let store1 = TranscriptionLogStore(url: testURL)
+        store1.append(text: "cancelled", wasPasted: false)
+
+        let store2 = TranscriptionLogStore(url: testURL)
+        XCTAssertFalse(store2.entries[0].wasPasted,
+                       "wasPasted = false must survive persist/reload cycle")
+    }
 }
