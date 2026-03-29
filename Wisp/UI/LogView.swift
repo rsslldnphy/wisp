@@ -37,6 +37,11 @@ private struct LogEntryRow: View {
                 Text(entry.text)
                     .font(.body)
                     .textSelection(.enabled)
+                if !entry.wasPasted {
+                    Text("not pasted")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             Button {

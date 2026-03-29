@@ -28,6 +28,11 @@ final class MenuBarController {
                 systemSymbolName: "mic.fill",
                 accessibilityDescription: "Wisp — Recording"
             )
+        case .cancelling:
+            button.image = NSImage(
+                systemSymbolName: "waveform",
+                accessibilityDescription: "Wisp — Cancelling"
+            )
         case .processing:
             button.image = NSImage(
                 systemSymbolName: "ellipsis.circle",

@@ -7,6 +7,9 @@ final class StatusIndicatorView: NSView {
     private let label: NSTextField
     private let spinner: NSProgressIndicator
     private let recordingDot: NSView
+    // Container view for the cancel progress bar; the orange fill is a CALayer sublayer
+    // so Auto Layout does not interfere with the width animation.
+    private let cancelProgressBarContainer: NSView
 
     private var errorDismissWork: DispatchWorkItem?
     var onErrorDismissed: (() -> Void)?
@@ -16,6 +19,7 @@ final class StatusIndicatorView: NSView {
         label = NSTextField(labelWithString: "")
         spinner = NSProgressIndicator()
         recordingDot = NSView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
+        cancelProgressBarContainer = NSView()
 
         super.init(frame: frameRect)
 
@@ -24,9 +28,11 @@ final class StatusIndicatorView: NSView {
         addSubview(spinner)
         addSubview(recordingDot)
         addSubview(label)
+        addSubview(cancelProgressBarContainer)
         setupSpinner()
         setupRecordingDot()
         setupLabel()
+        setupCancelProgressBarContainer()
     }
 
     @available(*, unavailable)
@@ -46,6 +52,7 @@ final class StatusIndicatorView: NSView {
             spinner.startAnimation(nil)
             recordingDot.isHidden = true
             recordingDot.layer?.removeAllAnimations()
+            stopCancelProgressAnimation()
             isHidden = false
 
         case .recording:
@@ -55,6 +62,17 @@ final class StatusIndicatorView: NSView {
             spinner.stopAnimation(nil)
             recordingDot.isHidden = false
             addPulseAnimation()
+            stopCancelProgressAnimation()
+            isHidden = false
+
+        case .cancelling:
+            label.stringValue = "Cancelling..."
+            label.textColor = NSColor.systemOrange
+            spinner.isHidden = true
+            spinner.stopAnimation(nil)
+            recordingDot.isHidden = true
+            recordingDot.layer?.removeAllAnimations()
+            startCancelProgressAnimation()
             isHidden = false
 
         case .transcribing:
@@ -64,6 +82,7 @@ final class StatusIndicatorView: NSView {
             spinner.startAnimation(nil)
             recordingDot.isHidden = true
             recordingDot.layer?.removeAllAnimations()
+            stopCancelProgressAnimation()
             isHidden = false
 
         case .error(let message):
@@ -73,6 +92,7 @@ final class StatusIndicatorView: NSView {
             spinner.stopAnimation(nil)
             recordingDot.isHidden = true
             recordingDot.layer?.removeAllAnimations()
+            stopCancelProgressAnimation()
             isHidden = false
             scheduleErrorDismiss()
 
@@ -80,6 +100,7 @@ final class StatusIndicatorView: NSView {
             spinner.stopAnimation(nil)
             recordingDot.layer?.removeAllAnimations()
             recordingDot.isHidden = true
+            stopCancelProgressAnimation()
             isHidden = true
         }
     }
@@ -139,6 +160,21 @@ final class StatusIndicatorView: NSView {
         ])
     }
 
+    private func setupCancelProgressBarContainer() {
+        // The container defines the track area via Auto Layout.
+        // The actual orange fill is a CALayer sublayer added/removed by the animation methods.
+        cancelProgressBarContainer.wantsLayer = true
+        cancelProgressBarContainer.translatesAutoresizingMaskIntoConstraints = false
+        cancelProgressBarContainer.isHidden = true
+
+        NSLayoutConstraint.activate([
+            cancelProgressBarContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            cancelProgressBarContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            cancelProgressBarContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            cancelProgressBarContainer.heightAnchor.constraint(equalToConstant: 3),
+        ])
+    }
+
     // MARK: - Animations
 
     private func addPulseAnimation() {
@@ -153,6 +189,48 @@ final class StatusIndicatorView: NSView {
         pulse.repeatCount = .infinity
         pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         dotLayer.add(pulse, forKey: "pulse")
+    }
+
+    private func startCancelProgressAnimation() {
+        cancelProgressBarContainer.isHidden = false
+        guard let containerLayer = cancelProgressBarContainer.layer else { return }
+
+        // Remove any previous fill sublayer and animations
+        containerLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        containerLayer.removeAllAnimations()
+
+        // Determine the bar width. frame.width is set by Auto Layout once the view is
+        // on screen. If layout has not yet run, fall back to the parent width minus padding.
+        let barWidth = cancelProgressBarContainer.frame.width > 0
+            ? cancelProgressBarContainer.frame.width
+            : max(frame.width - 20, 1)
+        let barHeight: CGFloat = 3
+
+        // Create a fill sublayer independent of Auto Layout so the animation is
+        // not overwritten by layout passes.
+        let fillLayer = CALayer()
+        fillLayer.backgroundColor = NSColor.systemOrange.cgColor
+        fillLayer.cornerRadius = 1.5
+        // Anchor at the leading (left) edge so shrinking width drains right → left.
+        fillLayer.anchorPoint = CGPoint(x: 0, y: 0.5)
+        fillLayer.bounds = CGRect(x: 0, y: 0, width: barWidth, height: barHeight)
+        fillLayer.position = CGPoint(x: 0, y: barHeight / 2)
+        containerLayer.addSublayer(fillLayer)
+
+        let drain = CABasicAnimation(keyPath: "bounds.size.width")
+        drain.fromValue = barWidth
+        drain.toValue = 0
+        drain.duration = 3.0
+        drain.fillMode = .forwards
+        drain.isRemovedOnCompletion = false
+        drain.timingFunction = CAMediaTimingFunction(name: .linear)
+        fillLayer.add(drain, forKey: "drain")
+    }
+
+    private func stopCancelProgressAnimation() {
+        cancelProgressBarContainer.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+        cancelProgressBarContainer.layer?.removeAllAnimations()
+        cancelProgressBarContainer.isHidden = true
     }
 
     private func scheduleErrorDismiss() {

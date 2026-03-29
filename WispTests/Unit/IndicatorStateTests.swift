@@ -18,4 +18,8 @@ final class IndicatorStateTests: XCTestCase {
     func testProcessingMapsToTranscribing() {
         XCTAssertEqual(IndicatorState.from(.processing), .transcribing)
     }
+
+    func testCancellingMapsToCancelling() {
+        XCTAssertEqual(IndicatorState.from(.cancelling), .cancelling)
+    }
 }
