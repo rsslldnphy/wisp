@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindow: StatusOverlayWindow?
     private var logStore = TranscriptionLogStore()
     private var logWindow: LogWindow?
+    private var escapeMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -126,6 +127,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyService?.register()
 
+        escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return } // 53 = Escape
+            Task { @MainActor [weak self] in
+                self?.handleEscapeKey()
+            }
+        }
+
         // Preload Whisper model and warm up Core ML compilation
         Task {
             do {
@@ -154,6 +162,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Dictation Flow
+
+    private func handleEscapeKey() {
+        guard state == .recording else { return }
+        cancelRecording()
+    }
+
+    private func cancelRecording() {
+        guard case .success(let newState) = state.transition(to: .processing) else {
+            print("[Wisp] State transition to processing failed (cancel)")
+            return
+        }
+
+        print("[Wisp] Recording cancelled via Escape — will transcribe and save without pasting")
+        menuBarController?.playStopSound()
+        state = newState
+        menuBarController?.updateState(state)
+        overlayWindow?.show(state: .transcribing)
+
+        currentSession?.stop()
+        guard let session = currentSession else {
+            print("[Wisp] No active session")
+            return
+        }
+
+        if session.audioDuration < 0.5 {
+            print("[Wisp] Recording too short, discarding")
+            handleResult(.discarded(reason: .tooShort))
+            return
+        }
+
+        guard let audioBuffer = audioCaptureService?.stopRecording() else {
+            print("[Wisp] No audio buffer returned")
+            handleResult(.failed(error: .microphoneUnavailable))
+            return
+        }
+
+        Task {
+            await transcribeAndSave(audioBuffer: audioBuffer)
+        }
+    }
 
     private func handleHotkeyToggle() {
         print("[Wisp] handleHotkeyToggle, state: \(state)")
@@ -294,6 +342,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         )
                     }
                 }
+                handleResult(.completed(text: cleanedText))
+            }
+        } catch let error as TranscriptionError {
+            await MainActor.run { handleResult(.failed(error: error)) }
+        } catch {
+            await MainActor.run {
+                handleResult(.failed(error: .processingFailed(message: error.localizedDescription)))
+            }
+        }
+    }
+
+    private func transcribeAndSave(audioBuffer: Data) async {
+        do {
+            let rawText = try await transcriptionService?.transcribe(audioBuffer: audioBuffer)
+            guard let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                await MainActor.run { handleResult(.discarded(reason: .noSpeechDetected)) }
+                return
+            }
+            let cleanedText: String
+            if let service = textCleanupService {
+                cleanedText = (try? await service.cleanup(rawText)) ?? rawText
+            } else {
+                cleanedText = rawText
+            }
+            await MainActor.run {
                 handleResult(.completed(text: cleanedText))
             }
         } catch let error as TranscriptionError {
