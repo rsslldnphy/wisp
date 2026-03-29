@@ -5,6 +5,7 @@ struct PreferencesView: View {
 
     let preferences: PreferencesStore
     let microphoneList: MicrophoneList
+    @Bindable var wordDictionary: WordDictionaryStore
 
     @State private var promptDraft: String = ""
     @State private var promptError: String? = nil
@@ -15,6 +16,7 @@ struct PreferencesView: View {
             microphoneSection
             startupSection
             promptSection
+            dictionarySection
         }
         .formStyle(.grouped)
         .frame(minWidth: 480, minHeight: 360)
@@ -99,6 +101,12 @@ struct PreferencesView: View {
                 commitPrompt()
             }
             .disabled(promptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private var dictionarySection: some View {
+        Section("Transcription Dictionary") {
+            WordDictionaryView(wordDictionary: wordDictionary)
         }
     }
 

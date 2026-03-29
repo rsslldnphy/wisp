@@ -12,6 +12,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-29
 - JSON file at `~/Library/Application Support/Wisp/transcription-log.json` (existing) (005-escape-cancel-countdown)
 - Swift 6.1+ with strict concurrency checking enabled + AppKit (NSSound, NSStatusItem, NSMenu), ServiceManagement (SMAppService), AVFoundation (existing) (006-polish-and-cleanup)
 - UserDefaults (startup preference, keyed on existing PreferencesStore) (006-polish-and-cleanup)
+- Swift 6.1+ with strict concurrency checking enabled + WhisperKit (existing), FoundationModels (existing), AppKit + SwiftUI (existing), KeyboardShortcuts (existing) (007-custom-word-dictionary)
+- UserDefaults (`com.wisp.wordDictionary` → `[String]`) (007-custom-word-dictionary)
 
 - Swift 5.9+ with strict concurrency checking + WhisperKit (Argmax), KeyboardShortcuts (Sindre Sorhus), AppKi (001-core-dictation-flow)
 
@@ -31,9 +33,9 @@ tests/
 Swift 5.9+ with strict concurrency checking: Follow standard conventions
 
 ## Recent Changes
+- 007-custom-word-dictionary: Added Swift 6.1+ with strict concurrency checking enabled + WhisperKit (existing), FoundationModels (existing), AppKit + SwiftUI (existing), KeyboardShortcuts (existing)
 - 006-polish-and-cleanup: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSSound, NSStatusItem, NSMenu), ServiceManagement (SMAppService), AVFoundation (existing)
 - 005-escape-cancel-countdown: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSPanel, Core Animation), WhisperKit (existing), AVFoundation (existing)
-- 004-transcription-log: Added Swift 6.1+ with strict concurrency checking enabled + AppKit (NSWindow, NSMenu), SwiftUI (List, Button), Foundation (Codable, JSONEncoder/Decoder, FileManager)
 
 
 <!-- MANUAL ADDITIONS START -->
