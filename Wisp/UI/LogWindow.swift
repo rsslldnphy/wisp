@@ -16,8 +16,10 @@ final class LogWindow: NSWindow {
         center()
     }
 
-    func show(entries: [TranscriptionLogEntry]) {
-        contentView = NSHostingView(rootView: LogView(entries: entries))
+    func show(logStore: TranscriptionLogStore, wordDictionary: WordDictionaryStore) {
+        contentView = NSHostingView(
+            rootView: LogView(logStore: logStore, wordDictionary: wordDictionary)
+        )
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

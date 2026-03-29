@@ -2,7 +2,7 @@ import Foundation
 
 struct TranscriptionLogEntry: Codable, Identifiable, Sendable {
     let id: UUID
-    let text: String
+    var text: String
     let timestamp: Date
     let wasPasted: Bool
 

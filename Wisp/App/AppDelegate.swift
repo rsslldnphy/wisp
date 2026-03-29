@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var currentSession: DictationSession?
 
     private var preferencesStore: PreferencesStore?
+    private var wordDictionary = WordDictionaryStore()
     private var microphoneList: MicrophoneList?
     private var hotkeyService: HotkeyService?
     private var audioCaptureService: AudioCaptureService?
@@ -93,12 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if logWindow == nil {
             logWindow = LogWindow()
         }
-        logWindow?.show(entries: logStore.entries)
+        logWindow?.show(logStore: logStore, wordDictionary: wordDictionary)
     }
 
     @objc private func openPreferences() {
         guard let store = preferencesStore, let mics = microphoneList else { return }
-        PreferencesWindow.show(preferences: store, microphoneList: mics)
+        PreferencesWindow.show(preferences: store, microphoneList: mics, wordDictionary: wordDictionary)
     }
 
     @objc private func toggleLaunchOnStartup() {
@@ -416,7 +417,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func transcribeAndPaste(audioBuffer: Data) async {
         do {
             print("[Wisp] Loading model and transcribing...")
-            let rawText = try await transcriptionService?.transcribe(audioBuffer: audioBuffer)
+            let hints = await MainActor.run { wordDictionary.words }
+            let rawText = try await transcriptionService?.transcribe(
+                audioBuffer: audioBuffer, wordHints: hints)
             print("[Wisp] Raw transcription: \(rawText ?? "<nil>")")
             guard let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else {
@@ -427,7 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             print("[Wisp] Cleaning up text...")
             let cleanedText: String
             if let service = textCleanupService {
-                cleanedText = (try? await service.cleanup(rawText)) ?? rawText
+                cleanedText = (try? await service.cleanup(rawText, wordHints: hints)) ?? rawText
             } else {
                 cleanedText = rawText
             }
@@ -456,7 +459,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func transcribeAndSave(audioBuffer: Data) async {
         do {
-            let rawText = try await transcriptionService?.transcribe(audioBuffer: audioBuffer)
+            let hints = await MainActor.run { wordDictionary.words }
+            let rawText = try await transcriptionService?.transcribe(
+                audioBuffer: audioBuffer, wordHints: hints)
             guard let rawText, !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 // No speech detected — silently reset to idle with no notification
                 await MainActor.run { silentlyResetToIdle() }
@@ -464,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             let cleanedText: String
             if let service = textCleanupService {
-                cleanedText = (try? await service.cleanup(rawText)) ?? rawText
+                cleanedText = (try? await service.cleanup(rawText, wordHints: hints)) ?? rawText
             } else {
                 cleanedText = rawText
             }

@@ -6,7 +6,11 @@ final class PreferencesWindow: NSWindowController {
 
     static var shared: PreferencesWindow?
 
-    static func show(preferences: PreferencesStore, microphoneList: MicrophoneList) {
+    static func show(
+        preferences: PreferencesStore,
+        microphoneList: MicrophoneList,
+        wordDictionary: WordDictionaryStore
+    ) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         if let existing = shared {
@@ -15,14 +19,23 @@ final class PreferencesWindow: NSWindowController {
         }
         let controller = PreferencesWindow(
             preferences: preferences,
-            microphoneList: microphoneList
+            microphoneList: microphoneList,
+            wordDictionary: wordDictionary
         )
         shared = controller
         controller.window?.makeKeyAndOrderFront(nil)
     }
 
-    private init(preferences: PreferencesStore, microphoneList: MicrophoneList) {
-        let view = PreferencesView(preferences: preferences, microphoneList: microphoneList)
+    private init(
+        preferences: PreferencesStore,
+        microphoneList: MicrophoneList,
+        wordDictionary: WordDictionaryStore
+    ) {
+        let view = PreferencesView(
+            preferences: preferences,
+            microphoneList: microphoneList,
+            wordDictionary: wordDictionary
+        )
         let hostingController = NSHostingController(rootView: view)
 
         let window = NSWindow(contentViewController: hostingController)

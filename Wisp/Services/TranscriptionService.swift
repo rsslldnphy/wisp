@@ -42,7 +42,7 @@ final class TranscriptionService: @unchecked Sendable {
         loadTask = nil
     }
 
-    func transcribe(audioBuffer: Data) async throws -> String {
+    func transcribe(audioBuffer: Data, wordHints: [String] = []) async throws -> String {
         try await loadModel()
 
         guard let kit = whisperKit else {
@@ -61,7 +61,15 @@ final class TranscriptionService: @unchecked Sendable {
         }
 
         do {
-            let results = try await kit.transcribe(audioArray: floatArray)
+            var decodeOptions = DecodingOptions()
+            if !wordHints.isEmpty, let tokenizer = kit.tokenizer {
+                let hintText = wordHints.joined(separator: ", ")
+                decodeOptions.promptTokens = tokenizer.encode(text: hintText)
+            }
+            let results = try await kit.transcribe(
+                audioArray: floatArray,
+                decodeOptions: decodeOptions
+            )
             let text = results.map(\.text).joined(separator: " ").trimmingCharacters(
                 in: .whitespacesAndNewlines)
             return text
