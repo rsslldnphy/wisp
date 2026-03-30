@@ -28,8 +28,9 @@ rm -rf "$BUILD_DIR/$APP_BUNDLE"
 mkdir -p "$BUILD_DIR/$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$BUILD_DIR/$APP_BUNDLE/Contents/Resources"
 
-cp ".build/release/$APP_NAME" "$BUILD_DIR/$APP_BUNDLE/Contents/MacOS/"
-cp "Support/Info.plist"        "$BUILD_DIR/$APP_BUNDLE/Contents/"
+cp ".build/release/$APP_NAME"              "$BUILD_DIR/$APP_BUNDLE/Contents/MacOS/"
+cp "Support/Info.plist"                    "$BUILD_DIR/$APP_BUNDLE/Contents/"
+cp -r ".build/release/${APP_NAME}_${APP_NAME}.bundle" "$BUILD_DIR/$APP_BUNDLE/Contents/Resources/"
 
 if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
     echo "==> Signing with: $SIGNING_IDENTITY"
